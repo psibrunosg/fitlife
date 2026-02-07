@@ -154,17 +154,13 @@ const ExerciseSetTracker: React.FC<ExerciseSetTrackerProps> = ({
     sessionData, 
     onUpdateSet 
 }) => {
-    // Determine number of sets from displayString (e.g., "4 x 10")
     const numSets = parseInt(item.displayString.split('x')[0]) || 3;
     const sets = sessionData[item.id] || Array(numSets).fill({ weight: '', completed: false });
-
-    // Progress bar calculation
     const completedCount = sets.filter(s => s.completed).length;
     const progressPercent = (completedCount / numSets) * 100;
 
     return (
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden mb-4 shadow-lg">
-            {/* Header with Image and Title */}
             <div className="flex p-4 gap-4 bg-zinc-950/30">
                 {item.img ? (
                     <img src={item.img} className="w-20 h-20 rounded-lg object-cover bg-black border border-zinc-800" alt={item.exercise} />
@@ -181,12 +177,10 @@ const ExerciseSetTracker: React.FC<ExerciseSetTrackerProps> = ({
                 </div>
             </div>
 
-            {/* Progress Bar */}
             <div className="h-1 w-full bg-zinc-800">
                 <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${progressPercent}%` }}></div>
             </div>
 
-            {/* Sets Inputs */}
             <div className="p-4 space-y-2">
                 <div className="flex text-xs text-zinc-500 font-medium px-2 mb-1">
                     <div className="w-10 text-center">Série</div>
@@ -227,10 +221,8 @@ const WorkoutSession = ({ userUid, workout, onClose }: { userUid: string, workou
    const [elapsedTime, setElapsedTime] = useState('00:00:00');
    const [logModalOpen, setLogModalOpen] = useState(false);
    
-   // Timer State
    const [restTimer, setRestTimer] = useState<{ active: boolean, duration: number }>({ active: false, duration: 60 });
 
-   // Initialize session data based on workout items
    useEffect(() => {
        const initialData: SessionData = {};
        workout.items.forEach(item => {
@@ -254,7 +246,6 @@ const WorkoutSession = ({ userUid, workout, onClose }: { userUid: string, workou
            
            currentSets[setIndex] = { ...currentSets[setIndex], ...data };
            
-           // Trigger Timer if completing a set (and it wasn't already completed)
            if (data.completed === true && !wasCompleted) {
                const exercise = workout.items.find(i => i.id === exerciseId) as WorkoutExercise;
                const timerValue = exercise?.timerValue || 60;
@@ -266,7 +257,6 @@ const WorkoutSession = ({ userUid, workout, onClose }: { userUid: string, workou
    };
 
    const handleFinishWorkout = async (rpe: number, comment: string) => {
-      // Build a detailed summary of loads used
       let detailedLog = `${comment}\n\nResumo de Cargas:\n`;
       workout.items.forEach(item => {
           if (item.type === 'exercise' && sessionData[item.id]) {
@@ -328,7 +318,6 @@ const WorkoutSession = ({ userUid, workout, onClose }: { userUid: string, workou
         ))}
       </div>
 
-      {/* Floating Action Button for Finish */}
       <div className="fixed bottom-20 right-4 z-40">
           <button 
             onClick={() => setLogModalOpen(true)} 
@@ -339,7 +328,6 @@ const WorkoutSession = ({ userUid, workout, onClose }: { userUid: string, workou
           </button>
       </div>
 
-      {/* Rest Timer Overlay */}
       <RestTimerOverlay 
           isActive={restTimer.active} 
           duration={restTimer.duration}
@@ -351,16 +339,13 @@ const WorkoutSession = ({ userUid, workout, onClose }: { userUid: string, workou
    );
 };
 
-// --- RUNNING PLAN COMPONENTS ---
-
 const RunningPlanView = ({ userUid, plan, onClose }: { userUid: string, plan: RunningPlan, onClose: () => void }) => {
     const [currentWeekIndex, setCurrentWeekIndex] = useState(0);
     const [logModalOpen, setLogModalOpen] = useState(false);
     const [selectedLog, setSelectedLog] = useState<{ week: string, day: string, workout: string } | null>(null);
     
-    // Day Selection State
     const daysMap = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-    const todayIndex = new Date().getDay(); // 0 is Sunday
+    const todayIndex = new Date().getDay();
     const [selectedDayKey, setSelectedDayKey] = useState(daysMap[todayIndex]);
 
     const handleOpenLogModal = (weekLabel: string, day: string, workout: RunningWorkout) => { 
@@ -385,7 +370,6 @@ const RunningPlanView = ({ userUid, plan, onClose }: { userUid: string, plan: Ru
         <div className="animate-fade-in pb-20">
              {logModalOpen && <LogRunModal onSave={handleLogRun} onClose={() => setLogModalOpen(false)} logData={selectedLog} />}
              
-             {/* Header */}
              <div className="flex justify-between items-center mb-6 sticky top-16 bg-zinc-950 z-20 pt-2 pb-2 border-b border-zinc-800">
                  <div>
                      <h2 className="text-xl font-bold">{plan.name}</h2>
@@ -398,7 +382,6 @@ const RunningPlanView = ({ userUid, plan, onClose }: { userUid: string, plan: Ru
                  <button onClick={onClose} className="text-zinc-400 hover:text-white bg-zinc-900 w-10 h-10 rounded-full flex items-center justify-center border border-zinc-800"><i className="ph ph-x text-xl"></i></button>
              </div>
 
-            {/* Day Selector */}
             <div className="flex gap-2 overflow-x-auto pb-4 mb-2 no-scrollbar">
                 {daysMap.map((key, index) => {
                     const isToday = index === todayIndex;
@@ -418,7 +401,6 @@ const RunningPlanView = ({ userUid, plan, onClose }: { userUid: string, plan: Ru
                 })}
             </div>
 
-            {/* Content Area */}
             <div className="min-h-[300px]">
                 {activeWorkout ? (
                     <RunningChecklistCard 
@@ -438,18 +420,16 @@ const RunningPlanView = ({ userUid, plan, onClose }: { userUid: string, plan: Ru
     );
 };
 
-// New Component: Parses running workout text into a checklist
 const RunningChecklistCard = ({ dayLabel, workout, onLog }: { dayLabel: string, workout: RunningWorkout, onLog: () => void }) => {
     const [checkedItems, setCheckedItems] = useState<boolean[]>([]);
     const [tasks, setTasks] = useState<string[]>([]);
     
-    // Parse workout into tasks
+    // Improved Parsing Logic for Multipliers (e.g., "5x 400m")
     useEffect(() => {
         let textToParse = '';
         if (typeof workout === 'string') {
             textToParse = workout;
         } else {
-            // Structured workout: Create a combined string or parse fields individually
             const parts = [];
             if (workout.warmup) parts.push(`Aquecimento: ${workout.warmup}`);
             if (workout.main) parts.push(`Principal: ${workout.main}`);
@@ -457,19 +437,32 @@ const RunningChecklistCard = ({ dayLabel, workout, onLog }: { dayLabel: string, 
             textToParse = parts.join(' + ');
         }
 
-        // Split logic: splits by +, /, or " e " surrounded by spaces, or new lines
-        // Regex looks for: 
-        // 1. Newline (\n)
-        // 2. The char '+' or '/'
-        // 3. The word ' e ' surrounded by spaces (case insensitive)
+        // 1. Split by delimiters
         const splitRegex = /\n|[+\/]|(?:\s+e\s+)/i;
-        
-        const rawTasks = textToParse.split(splitRegex)
+        const initialSegments = textToParse.split(splitRegex)
             .map(t => t.trim())
             .filter(t => t.length > 0);
+
+        // 2. Expand multipliers (e.g., "5x 400m")
+        const expandedTasks: string[] = [];
+        // Regex looks for a number at start, followed by 'x' and then the rest
+        const multiplierRegex = /^(\d+)\s*x\s*(.+)/i;
+
+        initialSegments.forEach(segment => {
+            const match = segment.match(multiplierRegex);
+            if (match) {
+                const count = parseInt(match[1]);
+                const description = match[2];
+                for (let i = 1; i <= count; i++) {
+                    expandedTasks.push(`${description} (${i}/${count})`);
+                }
+            } else {
+                expandedTasks.push(segment);
+            }
+        });
             
-        setTasks(rawTasks);
-        setCheckedItems(new Array(rawTasks.length).fill(false));
+        setTasks(expandedTasks);
+        setCheckedItems(new Array(expandedTasks.length).fill(false));
     }, [workout]);
 
     const toggleTask = (index: number) => {
@@ -537,7 +530,6 @@ const RunningChecklistCard = ({ dayLabel, workout, onLog }: { dayLabel: string, 
     );
 };
 
-
 // --- VIEW COMPONENTS ---
 
 const AssessmentsView = ({ assessments, onClose }: { assessments: AssessmentEntry[], onClose: () => void }) => {
@@ -572,8 +564,6 @@ const AssessmentsView = ({ assessments, onClose }: { assessments: AssessmentEntr
         </div>
     );
 };
-
-// --- MAIN DASHBOARD EXPORT ---
 
 export default function UserDashboard({ user, onLogout }: UserDashProps) {
   const [currentUser, setCurrentUser] = useState<User>(user);

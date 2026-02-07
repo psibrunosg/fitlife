@@ -1371,26 +1371,72 @@ const RunningTab = ({ students, setNotification, darkMode }: { students: User[],
     const [selectedStudentUid, setSelectedStudentUid] = useState('');
     const [planName, setPlanName] = useState('');
     const [weeks, setWeeks] = useState<number>(4);
+    const [selectedTemplate, setSelectedTemplate] = useState<RunningPlan | null>(null);
+    const [showAiModal, setShowAiModal] = useState(false);
+    const [aiGoal, setAiGoal] = useState('');
+    const [isAiLoading, setIsAiLoading] = useState(false);
 
     const handleCreatePlan = async () => {
-        if (!selectedStudentUid || !planName) { setNotification("Preencha os campos."); return; }
-        // Create a dummy plan structure
-        const newPlan: RunningPlan = {
-            id: `plan_${Date.now()}`,
-            name: planName,
-            weeks: Array.from({length: weeks}).map((_, i) => ({
-                id: `w_${i}`,
-                weekLabel: `Semana ${i+1}`,
-                days: {}
-            }))
-        };
+        if (!selectedStudentUid || (!planName && !selectedTemplate)) { setNotification("Preencha os campos."); return; }
+        
+        let newPlan: RunningPlan;
+
+        if (selectedTemplate) {
+            // Use Template
+            newPlan = {
+                ...selectedTemplate,
+                id: `plan_${Date.now()}`,
+                name: planName || selectedTemplate.name
+            };
+        } else {
+             // Create basic dummy structure
+             newPlan = {
+                id: `plan_${Date.now()}`,
+                name: planName,
+                weeks: Array.from({length: weeks}).map((_, i) => ({
+                    id: `w_${i}`,
+                    weekLabel: `Semana ${i+1}`,
+                    days: {}
+                }))
+            };
+        }
+
         try {
             await setDoc(doc(db, 'users', selectedStudentUid, 'runningPlans', newPlan.id), newPlan, {});
             setNotification("Plano de corrida criado!");
             setPlanName('');
+            setSelectedTemplate(null);
         } catch (e) {
             console.error(e);
             setNotification("Erro ao criar plano.");
+        }
+    };
+
+    const generateAiPlan = async () => {
+        if (!aiGoal) return;
+        setIsAiLoading(true);
+        try {
+             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+             const prompt = `Crie uma planilha de corrida completa de 4 semanas para o objetivo: "${aiGoal}". Retorne APENAS um JSON seguindo estritamente esta estrutura: { "name": "Nome do Plano", "weeks": [ { "id": "w1", "weekLabel": "Semana 1", "days": { "monday": { "type": "Trote", "warmup": "5min", "main": "30min leve", "cooldown": "5min" }, "wednesday": ..., "saturday": ... } } ] }. Use 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday' como chaves dos dias. O objeto do dia deve ter type, warmup, main, cooldown, zone.`;
+             
+             const response = await ai.models.generateContent({
+                model: "gemini-3-flash-preview",
+                contents: prompt,
+                config: { responseMimeType: "application/json" }
+             });
+
+             if (response.text) {
+                 const generatedPlan = JSON.parse(response.text);
+                 setSelectedTemplate({ ...generatedPlan, id: 'ai_generated' });
+                 setPlanName(generatedPlan.name);
+                 setShowAiModal(false);
+                 setNotification("Plano gerado com sucesso! Revise e salve.");
+             }
+        } catch (e) {
+            console.error(e);
+            setNotification("Erro ao gerar plano com IA.");
+        } finally {
+            setIsAiLoading(false);
         }
     };
     
@@ -1398,27 +1444,98 @@ const RunningTab = ({ students, setNotification, darkMode }: { students: User[],
     const cardClass = darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-200 shadow-sm';
 
     return (
-        <div className={`max-w-xl mx-auto ${cardClass} border rounded-xl p-8`}>
-            <h3 className="text-xl font-bold mb-6">Novo Plano de Corrida</h3>
-            <div className="space-y-4">
-                 <div>
-                     <label className="block text-sm font-medium mb-1 opacity-70">Aluno</label>
-                     <select value={selectedStudentUid} onChange={e => setSelectedStudentUid(e.target.value)} className={`w-full ${inputClass} rounded-lg p-3 outline-none`}>
-                         <option value="">Selecione...</option>
-                         {students.map(s => <option key={s.uid} value={s.uid}>{s.name}</option>)}
-                     </select>
-                 </div>
-                 <div>
-                     <label className="block text-sm font-medium mb-1 opacity-70">Nome do Plano</label>
-                     <input value={planName} onChange={e => setPlanName(e.target.value)} className={`w-full ${inputClass} rounded-lg p-3 outline-none`} placeholder="Ex: Meia Maratona" />
-                 </div>
-                 <div>
-                     <label className="block text-sm font-medium mb-1 opacity-70">Duração (Semanas)</label>
-                     <input type="number" value={weeks} onChange={e => setWeeks(Number(e.target.value))} className={`w-full ${inputClass} rounded-lg p-3 outline-none`} min="1" max="24" />
-                 </div>
-                 <button onClick={handleCreatePlan} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-lg mt-4">
-                     Criar Plano Básico
-                 </button>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-140px)]">
+            {/* AI Modal */}
+            {showAiModal && (
+                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 animate-fade-in">
+                    <div className={`${cardClass} border rounded-xl p-6 w-full max-w-md`}>
+                        <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-emerald-500"><i className="ph-fill ph-magic-wand"></i> Gerador IA</h3>
+                        <p className="text-sm text-zinc-400 mb-4">Descreva o objetivo do aluno (ex: "Correr 5km em 25min", "Maratona sub 4h", "Começar a correr do zero").</p>
+                        <textarea 
+                            value={aiGoal} 
+                            onChange={e => setAiGoal(e.target.value)} 
+                            className={`w-full ${inputClass} rounded-lg p-3 text-sm h-32 resize-none mb-4`} 
+                            placeholder="Ex: Treino para meia maratona focado em velocidade..."
+                        />
+                        <div className="flex gap-2">
+                            <button onClick={() => setShowAiModal(false)} className="flex-1 bg-zinc-700 hover:bg-zinc-600 text-white font-bold py-3 rounded-lg">Cancelar</button>
+                            <button onClick={generateAiPlan} disabled={isAiLoading || !aiGoal} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-lg disabled:opacity-50 flex justify-center items-center gap-2">
+                                {isAiLoading ? <><i className="ph ph-spinner animate-spin"></i> Gerando...</> : 'Gerar Plano'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <div className={`${cardClass} border rounded-xl p-8`}>
+                <h3 className="text-xl font-bold mb-6">Criar / Atribuir Plano</h3>
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium mb-1 opacity-70">Aluno</label>
+                        <select value={selectedStudentUid} onChange={e => setSelectedStudentUid(e.target.value)} className={`w-full ${inputClass} rounded-lg p-3 outline-none`}>
+                            <option value="">Selecione...</option>
+                            {students.map(s => <option key={s.uid} value={s.uid}>{s.name}</option>)}
+                        </select>
+                    </div>
+
+                    <div className="p-4 border border-zinc-700 rounded-xl bg-zinc-950/30">
+                        <div className="flex justify-between items-center mb-2">
+                            <label className="block text-sm font-medium opacity-70">Usar Modelo (Opcional)</label>
+                            <button onClick={() => setShowAiModal(true)} className="text-xs bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 px-2 py-1 rounded border border-emerald-500/20 flex items-center gap-1 font-bold transition-colors">
+                                <i className="ph-fill ph-magic-wand"></i> Gerar com IA
+                            </button>
+                        </div>
+                        <select 
+                            value={selectedTemplate ? selectedTemplate.id : ""} 
+                            onChange={e => {
+                                const t = SEED_RUNNING_PLANS.find(p => p.id === e.target.value);
+                                setSelectedTemplate(t || null);
+                                if (t) setPlanName(t.name);
+                            }} 
+                            className={`w-full ${inputClass} rounded-lg p-3 outline-none`}
+                        >
+                            <option value="">Nenhum (Criar do zero)</option>
+                            {selectedTemplate?.id === 'ai_generated' && <option value="ai_generated">✨ Plano Gerado por IA</option>}
+                            {SEED_RUNNING_PLANS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium mb-1 opacity-70">Nome do Plano</label>
+                        <input value={planName} onChange={e => setPlanName(e.target.value)} className={`w-full ${inputClass} rounded-lg p-3 outline-none`} placeholder="Ex: Meia Maratona" />
+                    </div>
+                    
+                    {!selectedTemplate && (
+                        <div>
+                            <label className="block text-sm font-medium mb-1 opacity-70">Duração (Semanas)</label>
+                            <input type="number" value={weeks} onChange={e => setWeeks(Number(e.target.value))} className={`w-full ${inputClass} rounded-lg p-3 outline-none`} min="1" max="24" />
+                        </div>
+                    )}
+
+                    <button onClick={handleCreatePlan} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-lg mt-4 shadow-lg shadow-emerald-900/20">
+                        {selectedTemplate ? 'Atribuir Plano ao Aluno' : 'Criar Estrutura Vazia'}
+                    </button>
+                </div>
+            </div>
+
+            <div className={`${cardClass} border rounded-xl p-8 overflow-y-auto`}>
+                <h3 className="text-xl font-bold mb-4">Sugestões de Treinos</h3>
+                <p className="text-sm opacity-60 mb-6">Copie e cole estas estruturas ao editar os dias do plano.</p>
+                <div className="space-y-3">
+                    {RUNNING_PROTOCOLS.map((proto, i) => (
+                        <div key={i} className={`p-4 rounded-lg border ${darkMode ? 'bg-zinc-950 border-zinc-800' : 'bg-gray-50 border-gray-200'} text-sm`}>
+                            <div className="flex justify-between mb-1">
+                                <span className="font-bold text-emerald-500">{proto.type}</span>
+                                <span className="text-xs bg-zinc-800 px-2 py-0.5 rounded text-zinc-400">{proto.zone}</span>
+                            </div>
+                            <div className="grid grid-cols-1 gap-1 opacity-80">
+                                <div><span className="text-xs uppercase tracking-wider opacity-50">Aquecimento:</span> {proto.warmup}</div>
+                                <div><span className="text-xs uppercase tracking-wider opacity-50">Principal:</span> {proto.main}</div>
+                                <div><span className="text-xs uppercase tracking-wider opacity-50">Desaquecimento:</span> {proto.cooldown}</div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
             </div>
         </div>
     );
