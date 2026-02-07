@@ -1,4 +1,4 @@
-// FIX: Use Firebase v8/compat syntax to match project dependency and provide v9 shims for the rest of the app.
+// Standard imports for bundler environment (Vite)
 import firebase from "firebase/compat/app";
 import "firebase/compat/firestore";
 import "firebase/compat/auth";

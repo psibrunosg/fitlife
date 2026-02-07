@@ -1198,106 +1198,228 @@ const WorkoutsTab = ({ students, allExercises, adminUid, setNotification, onRefr
   );
 };
 
-const ManageStudentTab = ({ students, setNotification, onEditWorkout, darkMode }: { students: User[], setNotification: (msg: string) => void, onEditWorkout: (studentId: string, workoutId: string, items: WorkoutItem[]) => void, darkMode: boolean }) => {
-  const [editingUser, setEditingUser] = useState<string | null>(null);
-  const [userWorkouts, setUserWorkouts] = useState<Workout[]>([]);
+const ManageStudentTab = ({ students, setNotification, onEditWorkout, darkMode }: { students: User[], setNotification: (msg: string) => void, onEditWorkout: (sid: string, wid: string, items: WorkoutItem[]) => void, darkMode: boolean }) => {
+  const [selectedStudent, setSelectedStudent] = useState<User | null>(null);
+  const [studentWorkouts, setStudentWorkouts] = useState<any[]>([]);
+  const [loadingWorkouts, setLoadingWorkouts] = useState(false);
 
-  const fetchWorkouts = async (uid: string) => {
-    if (editingUser === uid) {
-      setEditingUser(null);
-      return;
+  const handleSelectStudent = async (student: User) => {
+    setSelectedStudent(student);
+    setLoadingWorkouts(true);
+    try {
+      const q = collection(db, 'users', student.uid, 'workouts');
+      const snap = await getDocs(q);
+      setStudentWorkouts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch (e) {
+      console.error(e);
+      setNotification("Erro ao carregar treinos.");
+    } finally {
+      setLoadingWorkouts(false);
     }
-    setEditingUser(uid);
-    const q = collection(db, 'users', uid, 'workouts');
-    const snapshot = await getDocs(q);
-    setUserWorkouts(snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as Workout)));
   };
 
-  const deleteWorkout = async (uid: string, workoutId: string) => {
-    if (!confirm('Tem certeza?')) return;
-    await deleteDoc(doc(db, 'users', uid, 'workouts', workoutId));
-    setNotification('Treino excluído.');
-    fetchWorkouts(uid); // Refresh
-  };
-
-  const updateUserType = async (uid: string, newType: string) => {
-    await updateDoc(doc(db, 'users', uid), { workoutType: newType });
-    setNotification('Tipo de treino atualizado.');
+  const handleDeleteWorkout = async (workoutId: string) => {
+    if(!selectedStudent) return;
+    if(confirm(`Tem certeza que deseja excluir o treino "${workoutId}"?`)) {
+        try {
+            await deleteDoc(doc(db, 'users', selectedStudent.uid, 'workouts', workoutId));
+            setStudentWorkouts(prev => prev.filter(w => w.id !== workoutId));
+            setNotification("Treino excluído.");
+        } catch(e) {
+            setNotification("Erro ao excluir.");
+        }
+    }
   };
 
   const cardClass = darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-200 shadow-sm';
   const textSec = darkMode ? 'text-zinc-400' : 'text-zinc-500';
 
   return (
-    <div className="space-y-4">
-      {students.map(student => (
-        <div key={student.uid} className={`${cardClass} border rounded-xl p-4`}>
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-            <div className="flex items-center gap-4">
-              <img src={student.avatar} className="w-12 h-12 rounded-full" alt="" />
-              <div>
-                <div className="font-bold text-lg">{student.name}</div>
-                <div className={`${textSec} text-sm`}>{student.email}</div>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-4">
-               <select 
-                 value={student.workoutType} 
-                 onChange={(e) => updateUserType(student.uid, e.target.value)}
-                 className={`p-2 rounded-lg text-sm ${darkMode ? 'bg-zinc-800 border-zinc-700' : 'bg-gray-100 border-gray-300'}`}
-               >
-                 <option value="iniciante">Iniciante</option>
-                 <option value="intermediario">Intermediário</option>
-                 <option value="avancado">Avançado</option>
-                 <option value="personalizado">Personalizado</option>
-               </select>
-               <button onClick={() => fetchWorkouts(student.uid)} className="p-2 rounded-lg bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20">
-                 {editingUser === student.uid ? 'Ocultar Treinos' : 'Ver Treinos'}
-               </button>
-            </div>
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className={`lg:col-span-1 ${cardClass} border rounded-xl overflow-hidden flex flex-col h-[calc(100vh-140px)]`}>
+          <div className="p-4 border-b border-zinc-800 font-bold">Alunos</div>
+          <div className="overflow-y-auto flex-1">
+              {students.map(student => (
+                  <button 
+                    key={student.uid} 
+                    onClick={() => handleSelectStudent(student)}
+                    className={`w-full p-4 flex items-center gap-3 hover:bg-zinc-800/50 transition-colors border-b border-zinc-800/50 ${selectedStudent?.uid === student.uid ? 'bg-emerald-500/10' : ''}`}
+                  >
+                      <img src={student.avatar} className="w-10 h-10 rounded-full bg-zinc-800" alt="" />
+                      <div className="text-left">
+                          <div className={`font-medium ${selectedStudent?.uid === student.uid ? 'text-emerald-400' : (darkMode ? 'text-white' : 'text-zinc-900')}`}>{student.name}</div>
+                          <div className="text-xs text-zinc-500">{student.email}</div>
+                      </div>
+                  </button>
+              ))}
           </div>
+      </div>
 
-          {editingUser === student.uid && (
-            <div className="mt-4 pt-4 border-t border-zinc-800 animate-fade-in">
-              <h4 className="font-bold mb-3 text-sm uppercase tracking-wider text-emerald-500">Treinos Ativos</h4>
-              {userWorkouts.length === 0 ? (
-                <p className="text-zinc-500 text-sm">Nenhum treino atribuído.</p>
-              ) : (
-                <div className="grid gap-2">
-                  {userWorkouts.map(w => (
-                    <div key={w.id} className={`flex justify-between items-center p-3 rounded-lg ${darkMode ? 'bg-zinc-950' : 'bg-gray-50'}`}>
-                       <span className="font-medium">{w.id}</span>
-                       <div className="flex gap-2">
-                         <button onClick={() => onEditWorkout(student.uid, w.id, w.items)} className="text-blue-400 hover:text-white text-sm"><i className="ph-fill ph-pencil"></i> Editar</button>
-                         <button onClick={() => deleteWorkout(student.uid, w.id)} className="text-red-400 hover:text-white text-sm"><i className="ph-fill ph-trash"></i></button>
-                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+      <div className={`lg:col-span-2 ${cardClass} border rounded-xl p-6 h-[calc(100vh-140px)] overflow-y-auto`}>
+          {!selectedStudent ? (
+              <div className="h-full flex flex-col items-center justify-center text-zinc-500">
+                  <i className="ph ph-user text-4xl mb-2"></i>
+                  <p>Selecione um aluno para gerenciar</p>
+              </div>
+          ) : (
+              <div>
+                  <div className="flex items-center gap-4 mb-6 border-b border-zinc-800 pb-6">
+                      <img src={selectedStudent.avatar} className="w-16 h-16 rounded-full border-2 border-emerald-500" alt="" />
+                      <div>
+                          <h2 className="text-2xl font-bold">{selectedStudent.name}</h2>
+                          <p className="text-zinc-500">{selectedStudent.email}</p>
+                          <div className="flex gap-2 mt-2">
+                             <span className="text-xs bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded border border-emerald-500/20 capitalize">{selectedStudent.workoutType || 'Iniciante'}</span>
+                             {selectedStudent.hasCompletedAnamnesis && <span className="text-xs bg-blue-500/10 text-blue-400 px-2 py-1 rounded border border-blue-500/20">Anamnese OK</span>}
+                          </div>
+                      </div>
+                  </div>
+
+                  <h3 className="font-bold text-lg mb-4">Treinos Atribuídos</h3>
+                  {loadingWorkouts ? (
+                      <div className="text-emerald-500">Carregando treinos...</div>
+                  ) : studentWorkouts.length === 0 ? (
+                      <p className="text-zinc-500">Nenhum treino encontrado para este aluno.</p>
+                  ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {studentWorkouts.map(workout => (
+                              <div key={workout.id} className="bg-zinc-950/50 border border-zinc-800 p-4 rounded-lg hover:border-emerald-500/50 transition-colors">
+                                  <div className="flex justify-between items-start mb-2">
+                                      <h4 className="font-bold text-white">{workout.id}</h4>
+                                      <div className="flex gap-2">
+                                          <button onClick={() => onEditWorkout(selectedStudent.uid, workout.id, workout.items)} className="text-blue-400 hover:text-blue-300 p-1"><i className="ph ph-pencil-simple"></i></button>
+                                          <button onClick={() => handleDeleteWorkout(workout.id)} className="text-red-400 hover:text-red-300 p-1"><i className="ph ph-trash"></i></button>
+                                      </div>
+                                  </div>
+                                  <p className="text-xs text-zinc-500">{workout.items?.length || 0} exercícios</p>
+                              </div>
+                          ))}
+                      </div>
+                  )}
+              </div>
           )}
-        </div>
-      ))}
+      </div>
     </div>
   );
 };
 
-const RunningTab = ({ students, setNotification, darkMode }: { students: User[], setNotification: (msg: string) => void, darkMode: boolean }) => {
+const AssessmentTab = ({ students, setNotification, darkMode }: { students: User[], setNotification: (msg: string) => void, darkMode: boolean }) => {
+    const [selectedStudentUid, setSelectedStudentUid] = useState('');
+    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    const [weight, setWeight] = useState('');
+    const [height, setHeight] = useState('');
+    // Simple state for demonstration. In a real app, bind all fields.
+    const [notes, setNotes] = useState('');
+
+    const handleSave = async () => {
+        if (!selectedStudentUid) { setNotification("Selecione um aluno."); return; }
+        try {
+            const assessmentData: AssessmentEntry = {
+                id: `av_${Date.now()}`,
+                date,
+                anthropometry: {
+                    weight: parseFloat(weight),
+                    height: parseFloat(height),
+                    bmi: (parseFloat(weight) / (parseFloat(height) * parseFloat(height))) || 0
+                }
+            };
+            await addDoc(collection(db, 'users', selectedStudentUid, 'assessments'), assessmentData);
+            setNotification("Avaliação salva com sucesso!");
+            setWeight(''); setHeight(''); setNotes('');
+        } catch (e) {
+            console.error(e);
+            setNotification("Erro ao salvar avaliação.");
+        }
+    };
+    
+    const inputClass = darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-300 text-gray-900';
+    const cardClass = darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-200 shadow-sm';
+
     return (
-        <div className="text-center p-10">
-            <h3 className="text-xl font-bold mb-2">Módulo em Desenvolvimento</h3>
-            <p className="text-zinc-500">A funcionalidade de criação de planilhas de corrida estará disponível em breve.</p>
+        <div className={`max-w-2xl mx-auto ${cardClass} border rounded-xl p-8`}>
+             <div className="space-y-4">
+                 <div>
+                     <label className="block text-sm font-medium mb-1 opacity-70">Aluno</label>
+                     <select value={selectedStudentUid} onChange={e => setSelectedStudentUid(e.target.value)} className={`w-full ${inputClass} rounded-lg p-3 outline-none`}>
+                         <option value="">Selecione...</option>
+                         {students.map(s => <option key={s.uid} value={s.uid}>{s.name}</option>)}
+                     </select>
+                 </div>
+                 <div>
+                     <label className="block text-sm font-medium mb-1 opacity-70">Data</label>
+                     <input type="date" value={date} onChange={e => setDate(e.target.value)} className={`w-full ${inputClass} rounded-lg p-3 outline-none`} />
+                 </div>
+                 <div className="grid grid-cols-2 gap-4">
+                     <div>
+                         <label className="block text-sm font-medium mb-1 opacity-70">Peso (kg)</label>
+                         <input type="number" value={weight} onChange={e => setWeight(e.target.value)} className={`w-full ${inputClass} rounded-lg p-3 outline-none`} placeholder="0.00" />
+                     </div>
+                     <div>
+                         <label className="block text-sm font-medium mb-1 opacity-70">Altura (m)</label>
+                         <input type="number" value={height} onChange={e => setHeight(e.target.value)} className={`w-full ${inputClass} rounded-lg p-3 outline-none`} placeholder="0.00" />
+                     </div>
+                 </div>
+                 <button onClick={handleSave} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-lg mt-4">
+                     Salvar Avaliação
+                 </button>
+             </div>
         </div>
-    )
+    );
 };
 
-const AssessmentTab = ({ students, setNotification, darkMode }: { students: User[], setNotification: (msg: string) => void, darkMode: boolean }) => {
+const RunningTab = ({ students, setNotification, darkMode }: { students: User[], setNotification: (msg: string) => void, darkMode: boolean }) => {
+    const [selectedStudentUid, setSelectedStudentUid] = useState('');
+    const [planName, setPlanName] = useState('');
+    const [weeks, setWeeks] = useState<number>(4);
+
+    const handleCreatePlan = async () => {
+        if (!selectedStudentUid || !planName) { setNotification("Preencha os campos."); return; }
+        // Create a dummy plan structure
+        const newPlan: RunningPlan = {
+            id: `plan_${Date.now()}`,
+            name: planName,
+            weeks: Array.from({length: weeks}).map((_, i) => ({
+                id: `w_${i}`,
+                weekLabel: `Semana ${i+1}`,
+                days: {}
+            }))
+        };
+        try {
+            await setDoc(doc(db, 'users', selectedStudentUid, 'runningPlans', newPlan.id), newPlan, {});
+            setNotification("Plano de corrida criado!");
+            setPlanName('');
+        } catch (e) {
+            console.error(e);
+            setNotification("Erro ao criar plano.");
+        }
+    };
+    
+    const inputClass = darkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-300 text-gray-900';
+    const cardClass = darkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-200 shadow-sm';
+
     return (
-        <div className="text-center p-10">
-            <h3 className="text-xl font-bold mb-2">Módulo em Desenvolvimento</h3>
-            <p className="text-zinc-500">A funcionalidade de avaliação física estará disponível em breve.</p>
+        <div className={`max-w-xl mx-auto ${cardClass} border rounded-xl p-8`}>
+            <h3 className="text-xl font-bold mb-6">Novo Plano de Corrida</h3>
+            <div className="space-y-4">
+                 <div>
+                     <label className="block text-sm font-medium mb-1 opacity-70">Aluno</label>
+                     <select value={selectedStudentUid} onChange={e => setSelectedStudentUid(e.target.value)} className={`w-full ${inputClass} rounded-lg p-3 outline-none`}>
+                         <option value="">Selecione...</option>
+                         {students.map(s => <option key={s.uid} value={s.uid}>{s.name}</option>)}
+                     </select>
+                 </div>
+                 <div>
+                     <label className="block text-sm font-medium mb-1 opacity-70">Nome do Plano</label>
+                     <input value={planName} onChange={e => setPlanName(e.target.value)} className={`w-full ${inputClass} rounded-lg p-3 outline-none`} placeholder="Ex: Meia Maratona" />
+                 </div>
+                 <div>
+                     <label className="block text-sm font-medium mb-1 opacity-70">Duração (Semanas)</label>
+                     <input type="number" value={weeks} onChange={e => setWeeks(Number(e.target.value))} className={`w-full ${inputClass} rounded-lg p-3 outline-none`} min="1" max="24" />
+                 </div>
+                 <button onClick={handleCreatePlan} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-lg mt-4">
+                     Criar Plano Básico
+                 </button>
+            </div>
         </div>
-    )
-};
+    );
+}
